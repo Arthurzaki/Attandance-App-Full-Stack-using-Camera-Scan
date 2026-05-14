@@ -1,59 +1,45 @@
-import React, { useState, useEffect } from "react";
-import { 
-  View, 
-  Text, 
-  SafeAreaView, 
-  StyleSheet, 
-  FlatList, 
-  TouchableOpacity, 
-  ActivityIndicator 
-} from 'react-native';
-import { MaterialIcons } from '@expo/vector-icons';
-
-// Data awal (Dummy)
-const initialHistory = [
-  { id: "1", course: "Web Programming", date: "2026-03-01", status: "Absent", room: "Lab 1", lecturer: "Bpk. Andi" },
-  { id: "2", course: "Database System", date: "2026-03-02", status: "Present", room: "Lab 2", lecturer: "Ibu Rina" },
-];
+import React, { useEffect, useState } from "react";
+import {
+  View,
+  Text,
+  SafeAreaView,
+  StyleSheet,
+  FlatList,
+  TouchableOpacity,
+  ActivityIndicator,
+  RefreshControl,
+} from "react-native";
+import { MaterialIcons } from "@expo/vector-icons";
 
 export default function HistoryScreen({ navigation }) {
-  const [historyData, setHistoryData] = useState(initialHistory);
-  const [isLoading, setIsLoading] = useState(false);
+  const [historyData, setHistoryData] = useState([]);
+  const [isLoading, setIsLoading] = useState(true);
+  const [refreshing, setRefreshing] = useState(false);
 
-  // Fungsi untuk mensimulasikan pengambilan data tambahan (Infinite Scroll)
-  const loadMoreData = () => {
-    if (isLoading) return; // Mencegah double loading
+  // GANTI IP INI SESUAI IPv4 LAPTOP LU
+  const BASE_URL = "http://10.207.130.26:8080/api/attendance";
 
-    setIsLoading(true);
+  const fetchHistory = async () => {
+    try {
+      const response = await fetch(BASE_URL);
+      const result = await response.json();
 
-    // Simulasi loading selama 2 detik
-    setTimeout(() => {
-      const newItems = [
-        { 
-          id: Date.now().toString(), 
-          course: `Mata Kuliah #${historyData.length + 1}`, 
-          date: "2026-04-14", 
-          status: historyData.length % 2 === 0 ? "Present" : "Absent",
-          room: "Lab 3",
-          lecturer: "Dosen Tamu"
-        },
-      ];
-
-      // Konsep Spread Operator sesuai poin evaluasi modul
-      setHistoryData([...historyData, ...newItems]);
+      setHistoryData(result.content || []);
+    } catch (error) {
+      console.log("ERROR FETCH HISTORY:", error);
+    } finally {
       setIsLoading(false);
-    }, 2000);
+      setRefreshing(false);
+    }
   };
 
-  // Komponen loading di bagian bawah list
-  const renderFooter = () => {
-    if (!isLoading) return null;
-    return (
-      <View style={styles.footerLoader}>
-        <ActivityIndicator size="small" color="#4285F4" />
-        <Text style={styles.loaderText}>Memuat riwayat lama...</Text>
-      </View>
-    );
+  useEffect(() => {
+    fetchHistory();
+  }, []);
+
+  const onRefresh = () => {
+    setRefreshing(true);
+    fetchHistory();
   };
 
   const renderItem = ({ item }) => (
@@ -62,28 +48,49 @@ export default function HistoryScreen({ navigation }) {
       onPress={() => navigation.navigate("Detail", { dataPresensi: item })}
     >
       <View style={{ flex: 1 }}>
-        <Text style={styles.course}>{item.course}</Text>
-        <Text style={styles.date}>{item.date}</Text>
+        <Text style={styles.course}>
+          {item.matakuliah || "Mobile Programming"}
+        </Text>
+
+        <Text style={styles.date}>
+          {item.tanggal || "-"} - {item.jamPresensi || "-"}
+        </Text>
+
+        <Text style={styles.room}>
+          {item.ruangan || "Ruangan belum tersedia"}
+        </Text>
       </View>
+
       <Text style={item.status === "Present" ? styles.present : styles.absent}>
         {item.status}
       </Text>
+
       <MaterialIcons name="chevron-right" size={24} color="#999" />
     </TouchableOpacity>
   );
+
+  if (isLoading) {
+    return (
+      <View style={styles.loadingContainer}>
+        <ActivityIndicator size="large" color="#4285F4" />
+        <Text style={styles.loaderText}>Memuat riwayat presensi...</Text>
+      </View>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.container}>
       <FlatList
         data={historyData}
-        keyExtractor={(item) => item.id}
+        keyExtractor={(item) => item.id.toString()}
         renderItem={renderItem}
         contentContainerStyle={styles.content}
-        
-        // Konfigurasi Infinite Scroll sesuai modul
-        onEndReached={loadMoreData}
-        onEndReachedThreshold={0.5} // 0.5 berarti mulai muat saat scroll tersisa setengah
-        ListFooterComponent={renderFooter}
+        refreshControl={
+          <RefreshControl refreshing={refreshing} onRefresh={onRefresh} />
+        }
+        ListEmptyComponent={
+          <Text style={styles.emptyText}>Belum ada riwayat presensi.</Text>
+        }
       />
     </SafeAreaView>
   );
@@ -92,24 +99,25 @@ export default function HistoryScreen({ navigation }) {
 const styles = StyleSheet.create({
   container: { flex: 1, backgroundColor: "#F5F5F5" },
   content: { padding: 20 },
-  item: { 
-    flexDirection: "row", 
-    alignItems: "center", 
-    backgroundColor: "white", 
-    padding: 15, 
-    borderRadius: 8, 
-    marginBottom: 10, 
-    elevation: 2 
+  item: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "white",
+    padding: 15,
+    borderRadius: 8,
+    marginBottom: 10,
+    elevation: 2,
   },
   course: { fontSize: 16, fontWeight: "bold", color: "#333" },
   date: { fontSize: 12, color: "gray", marginTop: 4 },
+  room: { fontSize: 12, color: "#555", marginTop: 3 },
   present: { color: "green", fontWeight: "bold", marginRight: 5 },
   absent: { color: "red", fontWeight: "bold", marginRight: 5 },
-  footerLoader: { 
-    paddingVertical: 20, 
-    alignItems: 'center', 
-    flexDirection: 'row', 
-    justifyContent: 'center' 
+  loadingContainer: {
+    flex: 1,
+    justifyContent: "center",
+    alignItems: "center",
   },
-  loaderText: { marginLeft: 10, color: '#666', fontSize: 12 },
+  loaderText: { marginTop: 10, color: "#666", fontSize: 12 },
+  emptyText: { textAlign: "center", color: "#777", marginTop: 40 },
 });
