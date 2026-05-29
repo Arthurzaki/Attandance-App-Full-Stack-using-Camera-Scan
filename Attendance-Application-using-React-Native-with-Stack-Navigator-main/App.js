@@ -7,11 +7,11 @@ import { MaterialIcons } from '@expo/vector-icons';
 import HomeScreen from './pages/HomeScreen'; 
 import HistoryScreen from './pages/HistoryScreen'; 
 import DetailScreen from './pages/DetailScreen'; 
+import LocationScreen from './pages/LocationScreen';
 
 const Tab = createBottomTabNavigator(); 
 const Stack = createNativeStackNavigator(); 
 
-// Sub-rute Stack untuk area History agar bisa menumpuk DetailScreen di atas list
 function HistoryStack() {
   return (
     <Stack.Navigator>
@@ -20,14 +20,12 @@ function HistoryStack() {
         component={HistoryScreen} 
         options={{ title: 'Riwayat Absensi' }} 
       /> 
-      {/* Perhatikan penutup /> di atas */}
 
       <Stack.Screen 
         name="Detail" 
         component={DetailScreen} 
         options={{ title: 'Detail Informasi' }} 
       />
-      {/* Perhatikan penutup /> di atas */}
     </Stack.Navigator>
   );
 }
@@ -44,6 +42,7 @@ export default function App() {
             tabBarIcon: ({ color }) => <MaterialIcons name="home" size={24} color={color} />
           }}
         /> 
+
         <Tab.Screen
           name="HistoryTab"
           component={HistoryStack}
@@ -52,7 +51,16 @@ export default function App() {
             tabBarIcon: ({ color }) => <MaterialIcons name="history" size={24} color={color} />
           }}
         /> 
+
+        <Tab.Screen
+          name="LocationTab"
+          component={LocationScreen}
+          options={{
+            tabBarLabel: 'Lokasi',
+            tabBarIcon: ({ color }) => <MaterialIcons name="location-on" size={24} color={color} />
+          }}
+        />
       </Tab.Navigator>
     </NavigationContainer>
   );
-} 
+}
