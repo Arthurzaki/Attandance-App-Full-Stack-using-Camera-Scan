@@ -1,4 +1,4 @@
-import React, { useState } from "react";
+import React, { useState, useEffect } from "react";
 import {
   View,
   Text,
@@ -6,17 +6,97 @@ import {
   TouchableOpacity,
   Alert,
   SafeAreaView,
+  ActivityIndicator,
 } from "react-native";
 import { MaterialIcons } from "@expo/vector-icons";
 import { CameraView, useCameraPermissions } from "expo-camera";
+import * as Location from "expo-location";
 
 const Home = () => {
   const [permission, requestPermission] = useCameraPermissions();
   const [isScanning, setIsScanning] = useState(true);
   const [isCheckedIn, setIsCheckedIn] = useState(false);
 
+  // State lokasi
+  const [locationStatus, setLocationStatus] = useState("checking");
+  // checking, valid, invalid, error
+  const [distance, setDistance] = useState(0);
+
   // GANTI IP INI SESUAI IPv4 LAPTOP LU
   const BASE_URL = "http://10.207.130.26:8080/api/attendance";
+
+  // Koordinat titik absen/kampus
+  // Pakai koordinat yang kemarin sudah valid di HP lu
+  const KAMPUS_LAT = -6.3480393;
+  const KAMPUS_LON = 107.1481945;
+
+  // Untuk testing bisa ubah jadi 250 atau 500
+  const MAKSIMAL_JARAK_METER = 50;
+
+  useEffect(() => {
+    if (permission && permission.granted) {
+      verifyLocation();
+    }
+  }, [permission]);
+
+  const calculateDistance = (lat1, lon1, lat2, lon2) => {
+    const R = 6371e3; // meter
+    const p1 = (lat1 * Math.PI) / 180;
+    const p2 = (lat2 * Math.PI) / 180;
+    const deltaP = ((lat2 - lat1) * Math.PI) / 180;
+    const deltaLon = ((lon2 - lon1) * Math.PI) / 180;
+
+    const a =
+      Math.sin(deltaP / 2) * Math.sin(deltaP / 2) +
+      Math.cos(p1) *
+        Math.cos(p2) *
+        Math.sin(deltaLon / 2) *
+        Math.sin(deltaLon / 2);
+
+    const c = 2 * Math.atan2(Math.sqrt(a), Math.sqrt(1 - a));
+
+    return R * c;
+  };
+
+  const verifyLocation = async () => {
+    setLocationStatus("checking");
+
+    try {
+      const { status } = await Location.requestForegroundPermissionsAsync();
+
+      if (status !== "granted") {
+        Alert.alert(
+          "Akses Ditolak",
+          "Izin lokasi wajib diberikan untuk presensi."
+        );
+        setLocationStatus("error");
+        return;
+      }
+
+      const currentLocation = await Location.getCurrentPositionAsync({
+        accuracy: Location.Accuracy.High,
+      });
+
+      const jarakMeter = calculateDistance(
+        currentLocation.coords.latitude,
+        currentLocation.coords.longitude,
+        KAMPUS_LAT,
+        KAMPUS_LON
+      );
+
+      setDistance(Math.round(jarakMeter));
+
+      if (jarakMeter <= MAKSIMAL_JARAK_METER) {
+        setLocationStatus("valid");
+      } else {
+        setLocationStatus("invalid");
+      }
+    } catch (error) {
+      console.log("LOCATION ERROR:", error);
+      Alert.alert("Error Lokasi", "Gagal mengunci posisi GPS Anda.");
+      setLocationStatus("error");
+    }
+  };
 
   const handleBarcodeScanned = ({ data }) => {
     if (!isScanning) return;
@@ -111,6 +191,65 @@ const Home = () => {
     );
   }
 
+  if (locationStatus === "checking") {
+    return (
+      <SafeAreaView style={styles.center}>
+        <ActivityIndicator size="large" color="#0056b3" />
+        <Text style={styles.loadingText}>Memverifikasi Lokasi Anda...</Text>
+        <Text style={styles.infoText}>
+          Pastikan Anda berada di area absen.
+        </Text>
+      </SafeAreaView>
+    );
+  }
+
+  if (locationStatus === "invalid") {
+    return (
+      <SafeAreaView style={styles.center}>
+        <MaterialIcons
+          name="block"
+          size={80}
+          color="#dc3545"
+          style={{ marginBottom: 15 }}
+        />
+
+        <Text style={styles.errorTitle}>Akses Ditolak</Text>
+
+        <Text style={styles.errorSubtitle}>
+          Anda terdeteksi berada {distance} meter dari titik absen. Maksimal
+          jarak yang diizinkan adalah {MAKSIMAL_JARAK_METER} meter.
+        </Text>
+
+        <TouchableOpacity style={styles.buttonActive} onPress={verifyLocation}>
+          <Text style={styles.buttonText}>Cek Ulang Lokasi</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
+
+  if (locationStatus === "error") {
+    return (
+      <SafeAreaView style={styles.center}>
+        <MaterialIcons
+          name="location-off"
+          size={80}
+          color="#dc3545"
+          style={{ marginBottom: 15 }}
+        />
+
+        <Text style={styles.errorTitle}>Lokasi Bermasalah</Text>
+
+        <Text style={styles.errorSubtitle}>
+          Sistem gagal mendapatkan lokasi Anda. Aktifkan GPS lalu coba lagi.
+        </Text>
+
+        <TouchableOpacity style={styles.buttonActive} onPress={verifyLocation}>
+          <Text style={styles.buttonText}>Cek Ulang Lokasi</Text>
+        </TouchableOpacity>
+      </SafeAreaView>
+    );
+  }
+
   return (
     <SafeAreaView style={styles.container}>
       <CameraView
@@ -119,7 +258,9 @@ const Home = () => {
         barcodeScannerSettings={{
           barcodeTypes: ["qr"],
         }}
-        onBarcodeScanned={isScanning && !isCheckedIn ? handleBarcodeScanned : undefined}
+        onBarcodeScanned={
+          isScanning && !isCheckedIn ? handleBarcodeScanned : undefined
+        }
       />
 
       <View style={styles.overlay}>
@@ -128,11 +269,21 @@ const Home = () => {
           <Text style={styles.headerSubTitle}>Scan QR Code Presensi</Text>
         </View>
 
+        <View style={styles.validLocationBadge}>
+          <MaterialIcons
+            name="check-circle"
+            size={18}
+            color="white"
+            style={{ marginRight: 5 }}
+          />
+          <Text style={styles.validLocationText}>
+            Lokasi Valid ({distance}m)
+          </Text>
+        </View>
+
         <View style={styles.scanBox} />
 
-        <Text style={styles.scanText}>
-          Arahkan kamera ke QR Code dosen
-        </Text>
+        <Text style={styles.scanText}>Arahkan kamera ke QR Code dosen</Text>
 
         {isCheckedIn && (
           <View style={styles.successBox}>
@@ -172,6 +323,31 @@ const styles = StyleSheet.create({
     marginVertical: 20,
     color: "#333",
   },
+  loadingText: {
+    marginTop: 20,
+    fontSize: 18,
+    fontWeight: "bold",
+    color: "#333",
+    textAlign: "center",
+  },
+  infoText: {
+    color: "gray",
+    marginTop: 10,
+    textAlign: "center",
+  },
+  errorTitle: {
+    fontSize: 24,
+    fontWeight: "bold",
+    color: "#dc3545",
+    marginBottom: 10,
+  },
+  errorSubtitle: {
+    fontSize: 16,
+    textAlign: "center",
+    color: "#666",
+    lineHeight: 24,
+    marginBottom: 20,
+  },
   overlay: {
     flex: 1,
     backgroundColor: "rgba(0,0,0,0.45)",
@@ -193,6 +369,19 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: "#DDD",
     marginTop: 5,
+  },
+  validLocationBadge: {
+    flexDirection: "row",
+    alignItems: "center",
+    backgroundColor: "rgba(40, 167, 69, 0.9)",
+    paddingHorizontal: 15,
+    paddingVertical: 8,
+    borderRadius: 20,
+    marginBottom: 30,
+  },
+  validLocationText: {
+    color: "white",
+    fontWeight: "bold",
   },
   scanBox: {
     width: 250,
